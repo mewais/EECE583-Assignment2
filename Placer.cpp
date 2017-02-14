@@ -10,16 +10,16 @@ namespace PLACER
     LocationsType Locations;
     LocationsType EmptyLocations;
 
-    TOOLS::WorkQueue<std::tuple<std::vector<uint32_t>,std::vector<uint32_t>, uint32_t>>* WorkQueue;
+    // TOOLS::WorkQueue<std::tuple<std::vector<uint32_t>,std::vector<uint32_t>, uint32_t>>* WorkQueue;
 
     uint32_t NumThreads;
 
     LAYOUT::LayoutWidget *MainWindow;
     bool Verbose;
 
-    pthread_t *Workers;
-    pthread_mutex_t Mutex;
-    pthread_mutex_t PrintMutex;
+    // pthread_t *Workers;
+    // pthread_mutex_t Mutex;
+    // pthread_mutex_t PrintMutex;
 
     bool Sparse;
 
@@ -44,12 +44,8 @@ namespace PLACER
 
     void connectBlocks(uint32_t First, uint32_t Second, bool Verbose)
     {
-        // We don't really care which direction the nets is going to.
-        // So we just save it with the lower ID.
-        if (First < Second)
-            Blocks[First].push_back(Second);
-        else
-            Blocks[Second].push_back(First);
+        Blocks[First].push_back(Second);
+        Blocks[Second].push_back(First);
 
         if(Verbose)
             std::cout << "\tEPlacer: Connecteing Blocks " << First << " and " << Second << ".\n";
@@ -106,7 +102,8 @@ namespace PLACER
         // Can't have more threads than the number of blocks!!
         // Divide by four to give them room for picking candidates
         // and targets.
-        NumThreads = NThreads>Blocks.size()? Blocks.size()/4:NThreads;
+        // NumThreads = NThreads>Blocks.size()? Blocks.size()/4:NThreads;
+        NumThreads = 1;
 
         // Is it sparse?
         // The logic behind this is, if the number of blank locations is less
@@ -115,24 +112,24 @@ namespace PLACER
         // blocks.
         Sparse = (_1DGrid.size()-(Blocks.size()/_1DGrid.size())) > NumThreads? true:false;
 
-        // Create Worker Threads
-        if(Verbose)
-            std::cout << "EPlacer: Creating " << NumThreads << " Worker Threads.\n";
-            // Size the queue
-        WorkQueue = new TOOLS::WorkQueue<std::tuple<std::vector<uint32_t>,std::vector<uint32_t>,uint32_t>>(NumThreads);
-        // WorkQueue->resize(10);
-        uint32_t *ID = new uint32_t;
-        Workers = new pthread_t[NumThreads];
-        for(uint32_t i = 0; i < NumThreads; i++)
-        {
-            ID = new uint32_t;
-            *ID = i;
-            if(Verbose)
-                std::cout << "\tEPlacer: Creating thread " << (*ID) << ".\n";
-            pthread_create(&Workers[i], NULL, move, (void*)ID);
-        }
-        pthread_mutex_init(&Mutex, NULL);
-        pthread_mutex_init(&PrintMutex, NULL);
+        // // Create Worker Threads
+        // if(Verbose)
+        //     std::cout << "EPlacer: Creating " << NumThreads << " Worker Threads.\n";
+        //     // Size the queue
+        // WorkQueue = new TOOLS::WorkQueue<std::tuple<std::vector<uint32_t>,std::vector<uint32_t>,uint32_t>>(NumThreads);
+        // // WorkQueue->resize(10);
+        // uint32_t *ID = new uint32_t;
+        // Workers = new pthread_t[NumThreads];
+        // for(uint32_t i = 0; i < NumThreads; i++)
+        // {
+        //     ID = new uint32_t;
+        //     *ID = i;
+        //     if(Verbose)
+        //         std::cout << "\tEPlacer: Creating thread " << (*ID) << ".\n";
+        //     pthread_create(&Workers[i], NULL, move, (void*)ID);
+        // }
+        // pthread_mutex_init(&Mutex, NULL);
+        // pthread_mutex_init(&PrintMutex, NULL);
     }
 
     std::pair<uint32_t, uint32_t> getGridSize()
@@ -168,7 +165,8 @@ namespace PLACER
     // Simulated Annealing
     // TODO: make this faster by reducing the random search space instead of
     // "retrying"!!
-    void pickMoveCandidates(uint32_t Temperature)
+    // void pickMoveCandidates(uint32_t Temperature)
+    std::tuple<uint32_t, uint32_t, uint32_t> pickMoveCandidates(uint32_t Temperature)
     {
         // Whether sparse or not, select move candidates. Keep selecting until
         // you end up with NumThreads candidates that are "unrelated".
@@ -199,6 +197,11 @@ namespace PLACER
                     LookAgain = true;
                     break;
                 }
+                if (std::find(Blocks[Choice].begin(), Blocks[Choice].end(), Candidates[i]) != Blocks[Choice].end())
+                {
+                    LookAgain = true;
+                    break;
+                }
             }
             if (LookAgain)
             {
@@ -213,9 +216,9 @@ namespace PLACER
 
         if(Verbose)
         {
-            pthread_mutex_lock(&PrintMutex);
+            // pthread_mutex_lock(&PrintMutex);
             std::cout << "EPlacer: Picked move candidates.\n";
-            pthread_mutex_unlock(&PrintMutex);
+            // pthread_mutex_unlock(&PrintMutex);
         }
         std::vector<uint32_t> Targets;
         LocationsType TargetLocations;
@@ -297,51 +300,55 @@ namespace PLACER
 
         if(Verbose)
         {
-            pthread_mutex_lock(&PrintMutex);
+            // pthread_mutex_lock(&PrintMutex);
             std::cout << "EPlacer: Picked victim candidates.\n";
-            pthread_mutex_unlock(&PrintMutex);
+            // pthread_mutex_unlock(&PrintMutex);
         }
 
-        WorkQueue->push(std::make_tuple(Candidates, Targets, Temperature));
+        // WorkQueue->push(std::make_tuple(Candidates, Targets, Temperature));
 
         if(Verbose)
         {
-            pthread_mutex_lock(&PrintMutex);
+            // pthread_mutex_lock(&PrintMutex);
             std::cout << "EPlacer: Pushed move to queue.\n";
+            std::cout << "EPlacer: Picked Block " << Candidates[0] << ", Empty Target " << Targets[0] << "\n";
             // std::cout << "EPlacer: Size 1: " << Candidates.size() << ", Size 2: "
             //     << Targets.size() << "\n";
-            pthread_mutex_unlock(&PrintMutex);
+            // pthread_mutex_unlock(&PrintMutex);
         }
+        return std::make_tuple(Candidates[0], Targets[0], Temperature);
     }
 
-    void *move(void* ThreadID)
+    // void *move(void* ThreadID)
+    void move(std::tuple<uint32_t, uint32_t, uint32_t> PossibleMove)
     {
         uint32_t TID;
-        TID = *(uint32_t *)ThreadID;
+        // TID = *(uint32_t *)ThreadID;
+        TID = 0;
 
         if (Verbose)
         {
-            pthread_mutex_lock(&PrintMutex);
+            // pthread_mutex_lock(&PrintMutex);
             std::cout << "Worker thread " << TID << " created.\n";
-            pthread_mutex_unlock(&PrintMutex);
+            // pthread_mutex_unlock(&PrintMutex);
         }
 
-        while (true)
-        {
+        // while (true)
+        // {
             // See if the queue has a new move for us!
-            if (Verbose)
-            {
-                pthread_mutex_lock(&PrintMutex);
-                std::cout << "Worker thread " << TID << " trying to peak.\n";
-                pthread_mutex_unlock(&PrintMutex);
-            }
-            std::tuple<std::vector<uint32_t>,std::vector<uint32_t>,uint32_t> PossibleMove = WorkQueue->peak(TID);
-            if (Verbose)
-            {
-                pthread_mutex_lock(&PrintMutex);
-                std::cout << "Worker thread " << TID << " received move.\n";
-                pthread_mutex_unlock(&PrintMutex);
-            }
+            // if (Verbose)
+            // {
+            //     // pthread_mutex_lock(&PrintMutex);
+            //     std::cout << "Worker thread " << TID << " trying to peak.\n";
+            //     // pthread_mutex_unlock(&PrintMutex);
+            // }
+            // std::tuple<std::vector<uint32_t>,std::vector<uint32_t>,uint32_t> PossibleMove = WorkQueue->peak(TID);
+            // if (Verbose)
+            // {
+            //     // pthread_mutex_lock(&PrintMutex);
+            //     std::cout << "Worker thread " << TID << " received move.\n";
+            //     // pthread_mutex_unlock(&PrintMutex);
+            // }
 
             // Now that we have a potential move, we should try and check the cost.
             uint32_t CurrentCost = 0;
@@ -351,31 +358,31 @@ namespace PLACER
             //     << std::get<1>(PossibleMove).size() << ", ID = " << TID << "\n";
             // pthread_mutex_unlock(&PrintMutex);
 
-            for (uint32_t i = 0; i < Blocks[std::get<0>(PossibleMove)[TID]].size(); i++)
+            for (uint32_t i = 0; i < Blocks[std::get<0>(PossibleMove)].size(); i++)
             {
-                CurrentCost += distanceCostFunction(std::get<0>(PossibleMove)[TID],
-                    Blocks[std::get<0>(PossibleMove)[TID]][i]);
+                CurrentCost += distanceCostFunction(std::get<0>(PossibleMove),
+                    Blocks[std::get<0>(PossibleMove)][i]);
             }
             if (!Sparse)
             {
-                for (uint32_t i = 0; i < Blocks[std::get<1>(PossibleMove)[TID]].size(); i++)
+                for (uint32_t i = 0; i < Blocks[std::get<1>(PossibleMove)].size(); i++)
                 {
-                    CurrentCost += distanceCostFunction(std::get<1>(PossibleMove)[TID],
-                        Blocks[std::get<1>(PossibleMove)[TID]][i]);
+                    CurrentCost += distanceCostFunction(std::get<1>(PossibleMove),
+                        Blocks[std::get<1>(PossibleMove)][i]);
                 }
             }
 
-            for (uint32_t i = 0; i < Blocks[std::get<0>(PossibleMove)[TID]].size(); i++)
+            for (uint32_t i = 0; i < Blocks[std::get<0>(PossibleMove)].size(); i++)
             {
-                MoveCost += distanceCostFunction(std::get<1>(PossibleMove)[TID],
-                    Blocks[std::get<0>(PossibleMove)[TID]][i]);
+                MoveCost += distanceCostFunction(std::get<1>(PossibleMove),
+                    Blocks[std::get<0>(PossibleMove)][i]);
             }
             if (!Sparse)
             {
-                for (uint32_t i = 0; i < Blocks[std::get<1>(PossibleMove)[TID]].size(); i++)
+                for (uint32_t i = 0; i < Blocks[std::get<1>(PossibleMove)].size(); i++)
                 {
-                    MoveCost += distanceCostFunction(std::get<0>(PossibleMove)[TID],
-                        Blocks[std::get<1>(PossibleMove)[TID]][i]);
+                    MoveCost += distanceCostFunction(std::get<0>(PossibleMove),
+                        Blocks[std::get<1>(PossibleMove)][i]);
                 }
             }
 
@@ -396,60 +403,49 @@ namespace PLACER
                     // Don't forget to change the Grid too, for thr GUI.
                     if (Sparse)
                     {
-                        pthread_mutex_lock(&Mutex);
-                        if (Verbose)
-                            std::cout <<
-                            std::get<0>(PossibleMove)[TID] << ", " <<
-                            std::get<0>(PossibleMove)[TID] << ", " <<
-                            std::get<1>(PossibleMove)[TID] << ", " <<
-                            std::get<1>(PossibleMove)[TID] << "\n";
-                        std::cin.ignore();
+                        // pthread_mutex_lock(&Mutex);
                         std::pair<uint32_t, uint32_t> TempLoc;
-                        TempLoc = Locations[std::get<0>(PossibleMove)[TID]];
-                        Locations[std::get<0>(PossibleMove)[TID]] = EmptyLocations[std::get<1>(PossibleMove)[TID]];
-                        EmptyLocations[std::get<1>(PossibleMove)[TID]] = TempLoc;
+                        TempLoc = Locations[std::get<0>(PossibleMove)];
+                        // std::cout << "Moving block " << std::get<0>(PossibleMove) <<
+                        // " from location " << std::get<0>(Locations[std::get<0>(PossibleMove)]) << ", " << std::get<1>(Locations[std::get<0>(PossibleMove)]) <<
+                        // " to location " << std::get<0>(EmptyLocations[std::get<1>(PossibleMove)]) << ", " << std::get<1>(EmptyLocations[std::get<1>(PossibleMove)]) << "\n";
+                        Locations[std::get<0>(PossibleMove)] = EmptyLocations[std::get<1>(PossibleMove)];
+                        EmptyLocations[std::get<1>(PossibleMove)] = TempLoc;
                         Grid[std::get<0>(TempLoc)][std::get<1>(TempLoc)] = 0;
-                        Grid[std::get<0>(Locations[std::get<0>(PossibleMove)[TID]])]
-                            [std::get<1>(Locations[std::get<0>(PossibleMove)[TID]])]
-                            = std::get<0>(PossibleMove)[TID];
+                        Grid[std::get<0>(Locations[std::get<0>(PossibleMove)])]
+                            [std::get<1>(Locations[std::get<0>(PossibleMove)])]
+                            = std::get<0>(PossibleMove)+1;
                         if (MainWindow)
                         {
                             MainWindow->update();
                             usleep(2000);
                             // std::cin.ignore();
                         }
-                        pthread_mutex_unlock(&Mutex);
+                        // pthread_mutex_unlock(&Mutex);
                     }
                     else
                     {
-                        pthread_mutex_lock(&Mutex);
-                        if (Verbose)
-                            std::cout <<
-                            std::get<0>(PossibleMove)[TID] << ", " <<
-                            std::get<0>(PossibleMove)[TID] << ", " <<
-                            std::get<1>(PossibleMove)[TID] << ", " <<
-                            std::get<1>(PossibleMove)[TID] << "\n";
-                        std::cin.ignore();
+                        // pthread_mutex_lock(&Mutex);
                         std::pair<uint32_t, uint32_t> TempLoc;
-                        TempLoc = Locations[std::get<0>(PossibleMove)[TID]];
-                        Locations[std::get<0>(PossibleMove)[TID]] = Locations[std::get<1>(PossibleMove)[TID]];
-                        Locations[std::get<1>(PossibleMove)[TID]] = TempLoc;
-                        Grid[std::get<0>(TempLoc)][std::get<1>(TempLoc)] = std::get<1>(PossibleMove)[TID];
-                        Grid[std::get<0>(Locations[std::get<0>(PossibleMove)[TID]])]
-                            [std::get<1>(Locations[std::get<0>(PossibleMove)[TID]])]
-                            = std::get<0>(PossibleMove)[TID];
+                        TempLoc = Locations[std::get<0>(PossibleMove)];
+                        Locations[std::get<0>(PossibleMove)] = Locations[std::get<1>(PossibleMove)];
+                        Locations[std::get<1>(PossibleMove)] = TempLoc;
+                        Grid[std::get<0>(TempLoc)][std::get<1>(TempLoc)] = std::get<1>(PossibleMove)+1;
+                        Grid[std::get<0>(Locations[std::get<0>(PossibleMove)])]
+                            [std::get<1>(Locations[std::get<0>(PossibleMove)])]
+                            = std::get<0>(PossibleMove)+1;
                         if (MainWindow)
                         {
                             MainWindow->update();
                             usleep(2000);
                             // std::cin.ignore();
                         }
-                        pthread_mutex_unlock(&Mutex);
+                        // pthread_mutex_unlock(&Mutex);
                     }
                 }
             }
-        }
-        return NULL;                // disable stupid gcc warning
+        // }
+        // return NULL;                // disable stupid gcc warning
     }
 
     void simulateAnnealing()
@@ -457,26 +453,26 @@ namespace PLACER
         // Worker threads are already launched by now.
         if (Verbose)
             std::cout << "Starting Annealing.\n";
-        for (uint32_t Temperature = 1000; Temperature > 10; Temperature *= 0.9)
+        for (uint32_t Temperature = 1000; Temperature > 1; Temperature *= 0.9)
         {
             for (uint32_t NumIters = 0; NumIters < 10*std::pow(Blocks.size(),4/3); NumIters++)
             {
                 if(Verbose)
                 {
-                    pthread_mutex_lock(&PrintMutex);
+                    // pthread_mutex_lock(&PrintMutex);
                     std::cout << "EPlacer: Temperature " << Temperature << ", Iter " << NumIters << "\n";
-                    pthread_mutex_unlock(&PrintMutex);
+                    // pthread_mutex_unlock(&PrintMutex);
                 }
-                pickMoveCandidates(Temperature);
+                move(pickMoveCandidates(Temperature));
             }
         }
 
-        for(uint32_t i = 0; i < NumThreads; i++)
-        {
-            if(Verbose)
-                std::cout << "\tEPlacer: exiting thread " << i << ".\n";
-            pthread_join(Workers[i], NULL);
-        }
+        // for(uint32_t i = 0; i < NumThreads; i++)
+        // {
+        //     if(Verbose)
+        //         std::cout << "\tEPlacer: exiting thread " << i << ".\n";
+        //     pthread_join(Workers[i], NULL);
+        // }
     }
 
     uint32_t distanceCostFunction(uint32_t First, uint32_t Second)

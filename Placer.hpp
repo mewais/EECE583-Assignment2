@@ -9,10 +9,10 @@
 #include <cstdlib>
 #include <math.h>
 
-#include <pthread.h>
+// #include <pthread.h>
 #include <unistd.h>
 
-#include "Tools.hpp"
+// #include "Tools.hpp"
 #include "Layout.hpp"
 
 namespace LAYOUT
@@ -52,15 +52,15 @@ namespace PLACER
     // in case of a sparse placement, or a vector of swap candidates and a
     // vector of victim swap candidates.
     // The size of those vector depend on the number of threads.
-    extern TOOLS::WorkQueue<std::tuple<std::vector<uint32_t>,std::vector<uint32_t>,uint32_t>>* WorkQueue;
+    // extern TOOLS::WorkQueue<std::tuple<std::vector<uint32_t>,std::vector<uint32_t>,uint32_t>>* WorkQueue;
 
     extern uint32_t NumThreads;
 
     extern LAYOUT::LayoutWidget* MainWindow;
     extern bool Verbose;
 
-    extern pthread_t *Workers;
-    extern pthread_mutex_t Mutex;
+    // extern pthread_t *Workers;
+    // extern pthread_mutex_t Mutex;
 
     // Our move is different if the placement is sparse or not.
     extern bool Sparse;
@@ -83,8 +83,10 @@ namespace PLACER
     // regecting the move.
     // the number of threads selected by the user is actually the number of
     // worker threads.
-    void pickMoveCandidates(uint32_t Temperature);
-    void *move(void* ThreadID);
+    // void pickMoveCandidates(uint32_t Temperature);
+    std::tuple<uint32_t, uint32_t, uint32_t> pickMoveCandidates(uint32_t Temperature);
+    // void *move(void* ThreadID);
+    void move(std::tuple<uint32_t, uint32_t, uint32_t> PossibleMove);
     void simulateAnnealing();
 
     // This is a simple cost function, just calculates distance between two points.
